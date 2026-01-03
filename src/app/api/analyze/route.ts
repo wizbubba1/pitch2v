@@ -467,7 +467,9 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
     // Convert Buffer to Uint8Array for unpdf
     const uint8Array = new Uint8Array(buffer);
-    const { text } = await extractText(uint8Array);
+    const result = await extractText(uint8Array);
+    // Handle both string and array responses
+    const text = Array.isArray(result.text) ? result.text.join("\n") : String(result.text);
     console.log(`[PDF] Successfully extracted ${text.length} characters`);
     return text;
   } catch (err) {
