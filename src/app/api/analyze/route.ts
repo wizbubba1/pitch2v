@@ -461,17 +461,29 @@ Reference these current portfolio companies for synergy analysis:
 | V-Motion Academy | STEM education |`;
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const pdfParse = (await import("pdf-parse")).default;
-  const data = await pdfParse(buffer);
-  return data.text;
+  console.log("[PDF] Starting PDF extraction...");
+  try {
+    const pdfParse = (await import("pdf-parse")).default;
+    const data = await pdfParse(buffer);
+    console.log(`[PDF] Successfully extracted ${data.text.length} characters`);
+    return data.text;
+  } catch (err) {
+    console.error("[PDF] Extraction failed:", err);
+    throw new Error(`PDF parsing failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+  }
 }
 
 async function callOpenRouter(content: string): Promise<unknown> {
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4-5-20251101";
 
+  console.log("[API] Checking API key...");
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
+  console.log(`[API] API key found (${apiKey.substring(0, 15)}...)`);
+  console.log(`[API] Using model: ${model}`);
+  console.log(`[API] Sending ${content.length} characters to OpenRouter...`);
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -482,7 +494,7 @@ async function callOpenRouter(content: string): Promise<unknown> {
       "X-Title": "pitch2v - Vitruvius Venture Studio",
     },
     body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4-5-20251101",
+      model: model,
       messages: [
         {
           role: "system",
@@ -498,17 +510,24 @@ async function callOpenRouter(content: string): Promise<unknown> {
     }),
   });
 
+  console.log(`[API] Response status: ${response.status}`);
+
   if (!response.ok) {
     const error = await response.text();
+    console.error(`[API] OpenRouter error: ${error}`);
     throw new Error(`OpenRouter API error: ${error}`);
   }
 
   const data = await response.json();
+  console.log("[API] Received response from OpenRouter");
   const messageContent = data.choices?.[0]?.message?.content;
 
   if (!messageContent) {
+    console.error("[API] No content in response:", JSON.stringify(data));
     throw new Error("No response from OpenRouter");
   }
+  console.log(`[API] Got ${messageContent.length} characters of response`);
+  console.log("[API] Parsing JSON response...");
 
   // Extract JSON from response (handle potential markdown code blocks)
   let jsonContent = messageContent;
