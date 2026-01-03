@@ -460,15 +460,14 @@ Reference these current portfolio companies for synergy analysis:
 | Vitruvius Ed | MedTech training |
 | V-Motion Academy | STEM education |`;
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse");
+import { extractText } from "unpdf";
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   console.log("[PDF] Starting PDF extraction...");
   try {
-    const data = await pdfParse(buffer);
-    console.log(`[PDF] Successfully extracted ${data.text.length} characters`);
-    return data.text;
+    const { text } = await extractText(buffer);
+    console.log(`[PDF] Successfully extracted ${text.length} characters`);
+    return text;
   } catch (err) {
     console.error("[PDF] Extraction failed:", err);
     throw new Error(`PDF parsing failed: ${err instanceof Error ? err.message : "Unknown error"}`);
