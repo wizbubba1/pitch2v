@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --accent-blue: #4da6e8;
+  --accent-blue-light: #e8f4fc;
+  --accent-silver: #c0c0c0;
+  --accent-silver-light: #f5f5f5;
+  --border-color: #e5e7eb;
+  --text-muted: #6b7280;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-blue-light: var(--accent-blue-light);
+  --color-accent-silver: var(--accent-silver);
+  --color-accent-silver-light: var(--accent-silver-light);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Scientific monospace text styling */
+.font-code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--accent-silver-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-silver);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Circular progress ring */
+.progress-ring {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.progress-ring__circle {
+  stroke-dasharray: 440;
+  stroke-dashoffset: 440;
+  transition: stroke-dashoffset 1s ease-in-out;
+}
+
+/* Upload zone styling */
+.upload-zone {
+  border: 2px dashed var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color: var(--accent-blue);
+  background-color: var(--accent-blue-light);
+}
+
+/* Button styling */
+.btn-primary {
+  background-color: var(--foreground);
+  color: var(--background);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background-color: #333;
+}
+
+.btn-secondary {
+  background-color: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent-silver);
+  background-color: var(--accent-silver-light);
+}
+
+/* Score category styling */
+.score-category {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.score-category:last-child {
+  border-bottom: none;
+}
+
+/* Pulse animation for loading */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(77, 166, 232, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(77, 166, 232, 0);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Input styling */
+input[type="text"],
+input[type="url"] {
+  font-family: var(--font-mono), monospace;
+}
