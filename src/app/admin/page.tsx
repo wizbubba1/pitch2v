@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   BarChart3,
   Users,
@@ -21,6 +21,9 @@ import {
   ArrowDown,
   Minus,
   RotateCcw,
+  Upload,
+  Plus,
+  X,
 } from "lucide-react";
 
 interface AnalysisResult {
@@ -308,6 +311,7 @@ export default function AdminPage() {
                 getScoreColor={getScoreColor}
                 getStatusBadge={getStatusBadge}
                 password={password}
+                onReEvalComplete={fetchSubmissions}
               />
             ))
           )}
@@ -345,6 +349,7 @@ function SubmissionCard({
   getScoreColor,
   getStatusBadge,
   password,
+  onReEvalComplete,
 }: {
   submission: Submission;
   isExpanded: boolean;
@@ -353,8 +358,13 @@ function SubmissionCard({
   getScoreColor: (score: number) => string;
   getStatusBadge: (status: string) => string;
   password: string;
+  onReEvalComplete: () => void;
 }) {
   const [viewMode, setViewMode] = useState<"initial" | "reeval">("reeval");
+  const [adminFiles, setAdminFiles] = useState<File[]>([]);
+  const [isReEvaluating, setIsReEvaluating] = useState(false);
+  const [reEvalError, setReEvalError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialScore = submission.analysis.overallScore;
   const hasReEval = !!submission.reEvaluation;
@@ -368,6 +378,57 @@ function SubmissionCard({
 
   const getDownloadUrl = (type: "pitch" | "additional", index = 0) => {
     return `/api/admin/download?id=${submission.id}&type=${type}&index=${index}&password=${encodeURIComponent(password)}`;
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setAdminFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+      setReEvalError(null);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setAdminFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAdminReEval = async () => {
+    if (adminFiles.length === 0) return;
+
+    setIsReEvaluating(true);
+    setReEvalError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("submissionId", submission.id);
+      adminFiles.forEach((file, i) => {
+        formData.append(`doc_${i}`, file);
+      });
+
+      const response = await fetch("/api/admin/reeval", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${password}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Re-evaluation failed");
+      }
+
+      // Clear files and refresh
+      setAdminFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      onReEvalComplete();
+    } catch (error) {
+      setReEvalError(error instanceof Error ? error.message : "Re-evaluation failed");
+    } finally {
+      setIsReEvaluating(false);
+    }
   };
 
   return (
@@ -684,6 +745,81 @@ function SubmissionCard({
               </div>
             </div>
           )}
+
+          {/* Admin Re-Evaluation Section */}
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Upload className="w-4 h-4 text-blue-600" />
+              <p className="text-sm font-semibold text-blue-800">Admin Re-Evaluation</p>
+            </div>
+            <p className="text-xs text-blue-600 mb-3">
+              Upload additional documentation to trigger a new AI analysis combining all materials.
+            </p>
+
+            {/* File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              id={`admin-upload-${submission.id}`}
+            />
+            <label
+              htmlFor={`admin-upload-${submission.id}`}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-blue-300 rounded-lg text-sm text-blue-700 cursor-pointer hover:bg-blue-100 transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Plus className="w-4 h-4" />
+              Add Documents
+            </label>
+
+            {/* Selected Files */}
+            {adminFiles.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-gray-500 font-code">Selected files:</p>
+                {adminFiles.map((file, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between bg-white px-3 py-2 rounded border border-gray-200"
+                  >
+                    <span className="text-sm font-code truncate">{file.name}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                      className="text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleAdminReEval(); }}
+                  disabled={isReEvaluating}
+                  className="mt-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-code hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isReEvaluating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Running AI Analysis...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4" />
+                      Run Re-Evaluation
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {reEvalError && (
+              <div className="mt-3 p-2 bg-red-100 border border-red-200 rounded text-sm text-red-700">
+                {reEvalError}
+              </div>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-2 pt-4 border-t border-gray-100">
