@@ -480,7 +480,7 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 
 async function callOpenRouter(content: string): Promise<unknown> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4";
+  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4.5";
 
   console.log("[API] Checking API key...");
   if (!apiKey) {
@@ -510,7 +510,7 @@ async function callOpenRouter(content: string): Promise<unknown> {
           content: `Please analyze the following pitch deck content and provide your comprehensive evaluation following the Vitruvius framework. Respond ONLY with the JSON object as specified in the response format.\n\n---\n\nPITCH DECK CONTENT:\n\n${content}`,
         },
       ],
-      temperature: 0.3,
+      temperature: 0,
       max_tokens: 8000,
     }),
   });

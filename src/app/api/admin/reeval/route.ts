@@ -158,7 +158,7 @@ async function reEvaluateWithAI(
   additionalDocsTexts: { name: string; text: string }[]
 ): Promise<Record<string, unknown>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4";
+  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4.5";
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
@@ -194,7 +194,7 @@ async function reEvaluateWithAI(
           content: `Re-evaluate this startup based on the original pitch deck AND the additional documentation provided by the admin. Respond ONLY with the JSON object:\n\n${combinedContent}`,
         },
       ],
-      temperature: 0.3,
+      temperature: 0,
       max_tokens: 10000,
     }),
   });
