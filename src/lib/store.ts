@@ -1,6 +1,31 @@
 // In-memory store for submissions (will be replaced with database)
 // WARNING: Data is lost when server restarts
 
+export interface AnalysisResult {
+  startupName?: string;
+  executiveSummary?: string;
+  recommendation?: string;
+  overallScore: number;
+  scores: Record<string, number>;
+  categoryAnalysis?: Record<string, unknown>;
+  strengths: string[];
+  improvements: string[];
+  portfolioSynergies?: string[];
+  nextSteps?: string[];
+  dreamCreateDeliver?: {
+    dream: string;
+    create: string;
+    deliver: string;
+  };
+}
+
+export interface StoredFile {
+  name: string;
+  size: number;
+  base64: string; // Base64 encoded file data
+  extractedText: string; // Extracted text content
+}
+
 export interface Submission {
   id: string;
   createdAt: string;
@@ -13,25 +38,16 @@ export interface Submission {
   };
   fileName: string;
   fileSize: number;
-  analysis: {
-    startupName?: string;
-    executiveSummary?: string;
-    recommendation?: string;
-    overallScore: number;
-    scores: Record<string, number>;
-    categoryAnalysis?: Record<string, unknown>;
-    strengths: string[];
-    improvements: string[];
-    portfolioSynergies?: string[];
-    nextSteps?: string[];
-    dreamCreateDeliver?: {
-      dream: string;
-      create: string;
-      deliver: string;
-    };
+  pitchDeckFile: StoredFile; // Original pitch deck with base64 data
+  analysis: AnalysisResult; // Initial analysis
+  // Re-evaluation after additional docs
+  additionalDocsFiles: StoredFile[]; // Additional documents with base64 data
+  reEvaluation?: {
+    analysis: AnalysisResult;
+    evaluatedAt: string;
+    combinedDocuments: string[]; // Names of docs included in re-evaluation
   };
-  additionalDocs: string[];
-  status: "pending" | "reviewing" | "accepted" | "rejected" | "additional-docs-requested";
+  status: "pending" | "reviewing" | "accepted" | "rejected" | "additional-docs-requested" | "re-evaluated";
   notes: string;
 }
 

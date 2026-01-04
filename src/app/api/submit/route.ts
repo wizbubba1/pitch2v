@@ -270,6 +270,9 @@ export async function POST(request: NextRequest) {
     const analysis = await analyzeWithAI(content);
     console.log("[SUBMIT] Analysis complete. Score:", analysis.overallScore);
 
+    // Store the file as base64
+    const base64File = buffer.toString("base64");
+
     // Create submission
     const submissionId = generateId();
     const submission: Submission = {
@@ -278,8 +281,14 @@ export async function POST(request: NextRequest) {
       contactInfo,
       fileName: file.name,
       fileSize: file.size,
-      analysis: analysis as Submission["analysis"],
-      additionalDocs: [],
+      pitchDeckFile: {
+        name: file.name,
+        size: file.size,
+        base64: base64File,
+        extractedText: content,
+      },
+      analysis: analysis as unknown as Submission["analysis"],
+      additionalDocsFiles: [],
       status: "pending",
       notes: "",
     };

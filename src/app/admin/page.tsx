@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   BarChart3,
   Users,
   CheckCircle,
   XCircle,
-  Clock,
   AlertCircle,
   ChevronDown,
   ChevronUp,
@@ -17,7 +16,44 @@ import {
   Lock,
   Loader2,
   RefreshCw,
+  Download,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+  RotateCcw,
 } from "lucide-react";
+
+interface AnalysisResult {
+  startupName?: string;
+  executiveSummary?: string;
+  recommendation?: string;
+  overallScore: number;
+  scores: Record<string, number>;
+  categoryAnalysis?: Record<string, {
+    score: number;
+    feedback: string;
+    strengths: string[];
+    improvements: string[];
+    newInfoFromDocs?: string;
+  }>;
+  strengths: string[];
+  improvements: string[];
+  portfolioSynergies?: string[];
+  nextSteps?: string[];
+  reEvaluationNotes?: string;
+  dreamCreateDeliver?: {
+    dream: string;
+    create: string;
+    deliver: string;
+  };
+}
+
+interface StoredFile {
+  name: string;
+  size: number;
+  base64: string;
+  extractedText: string;
+}
 
 interface Submission {
   id: string;
@@ -31,29 +67,14 @@ interface Submission {
   };
   fileName: string;
   fileSize: number;
-  analysis: {
-    startupName?: string;
-    executiveSummary?: string;
-    recommendation?: string;
-    overallScore: number;
-    scores: Record<string, number>;
-    categoryAnalysis?: Record<string, {
-      score: number;
-      feedback: string;
-      strengths: string[];
-      improvements: string[];
-    }>;
-    strengths: string[];
-    improvements: string[];
-    portfolioSynergies?: string[];
-    nextSteps?: string[];
-    dreamCreateDeliver?: {
-      dream: string;
-      create: string;
-      deliver: string;
-    };
+  pitchDeckFile?: StoredFile;
+  analysis: AnalysisResult;
+  additionalDocsFiles?: StoredFile[];
+  reEvaluation?: {
+    analysis: AnalysisResult;
+    evaluatedAt: string;
+    combinedDocuments: string[];
   };
-  additionalDocs: string[];
   status: string;
   notes: string;
 }
@@ -286,6 +307,7 @@ export default function AdminPage() {
                 onStatusChange={(status) => updateStatus(submission.id, status)}
                 getScoreColor={getScoreColor}
                 getStatusBadge={getStatusBadge}
+                password={password}
               />
             ))
           )}
@@ -322,6 +344,7 @@ function SubmissionCard({
   onStatusChange,
   getScoreColor,
   getStatusBadge,
+  password,
 }: {
   submission: Submission;
   isExpanded: boolean;
@@ -329,8 +352,16 @@ function SubmissionCard({
   onStatusChange: (status: string) => void;
   getScoreColor: (score: number) => string;
   getStatusBadge: (status: string) => string;
+  password: string;
 }) {
-  const score = submission.analysis.overallScore;
+  const initialScore = submission.analysis.overallScore;
+  const hasReEval = !!submission.reEvaluation;
+  const currentScore = hasReEval ? submission.reEvaluation!.analysis.overallScore : initialScore;
+  const scoreChange = hasReEval ? currentScore - initialScore : 0;
+
+  const getDownloadUrl = (type: "pitch" | "additional", index = 0) => {
+    return `/api/admin/download?id=${submission.id}&type=${type}&index=${index}&password=${encodeURIComponent(password)}`;
+  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
@@ -340,16 +371,43 @@ function SubmissionCard({
         onClick={onToggle}
       >
         <div className="flex items-center gap-4">
-          <div
-            className={`w-14 h-14 rounded-lg flex items-center justify-center font-semibold text-lg ${getScoreColor(
-              score
-            )}`}
-          >
-            {score}%
+          <div className="relative">
+            <div
+              className={`w-14 h-14 rounded-lg flex items-center justify-center font-semibold text-lg ${getScoreColor(
+                currentScore
+              )}`}
+            >
+              {currentScore}%
+            </div>
+            {hasReEval && (
+              <div
+                className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                  scoreChange > 0
+                    ? "bg-emerald-500 text-white"
+                    : scoreChange < 0
+                    ? "bg-red-500 text-white"
+                    : "bg-gray-400 text-white"
+                }`}
+                title={`Score change: ${scoreChange > 0 ? "+" : ""}${scoreChange}`}
+              >
+                {scoreChange > 0 ? (
+                  <ArrowUp className="w-3 h-3" />
+                ) : scoreChange < 0 ? (
+                  <ArrowDown className="w-3 h-3" />
+                ) : (
+                  <Minus className="w-3 h-3" />
+                )}
+              </div>
+            )}
           </div>
           <div>
-            <h3 className="font-semibold">
+            <h3 className="font-semibold flex items-center gap-2">
               {submission.analysis.startupName || submission.contactInfo.companyName}
+              {hasReEval && (
+                <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded font-code">
+                  Re-evaluated
+                </span>
+              )}
             </h3>
             <p className="text-sm text-gray-500 font-code">
               {submission.contactInfo.name} · {submission.contactInfo.companyRole}
@@ -406,44 +464,107 @@ function SubmissionCard({
               </div>
             )}
             <div>
-              <p className="text-xs text-gray-400 font-code mb-1">File</p>
-              <p className="text-sm flex items-center gap-1">
-                <FileText className="w-3 h-3" />
+              <p className="text-xs text-gray-400 font-code mb-1">Pitch Deck</p>
+              <a
+                href={getDownloadUrl("pitch")}
+                className="text-sm text-[#4da6e8] flex items-center gap-1 hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Download className="w-3 h-3" />
                 {submission.fileName}
-              </p>
+              </a>
             </div>
             <div>
               <p className="text-xs text-gray-400 font-code mb-1">Recommendation</p>
               <p className="text-sm font-medium">
-                {submission.analysis.recommendation || "N/A"}
+                {hasReEval
+                  ? submission.reEvaluation!.analysis.recommendation
+                  : submission.analysis.recommendation || "N/A"}
               </p>
             </div>
           </div>
 
-          {/* Executive Summary */}
-          {submission.analysis.executiveSummary && (
-            <div className="mb-6">
-              <p className="text-xs text-gray-400 font-code mb-2">Executive Summary</p>
-              <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
-                {submission.analysis.executiveSummary}
-              </p>
+          {/* Re-evaluation Score Comparison */}
+          {hasReEval && (
+            <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <div className="flex items-center gap-2 mb-3">
+                <RotateCcw className="w-4 h-4 text-purple-600" />
+                <p className="text-sm font-semibold text-purple-800">Re-Evaluation Results</p>
+                <span className="text-xs text-purple-600 font-code">
+                  {new Date(submission.reEvaluation!.evaluatedAt).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-6 mb-3">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-code">Initial</p>
+                  <p className={`text-2xl font-bold ${initialScore >= 70 ? "text-emerald-600" : initialScore >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                    {initialScore}%
+                  </p>
+                </div>
+                <div className="text-2xl text-gray-400">→</div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-code">After Docs</p>
+                  <p className={`text-2xl font-bold ${currentScore >= 70 ? "text-emerald-600" : currentScore >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                    {currentScore}%
+                  </p>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  scoreChange > 0 ? "bg-emerald-100 text-emerald-700" :
+                  scoreChange < 0 ? "bg-red-100 text-red-700" :
+                  "bg-gray-100 text-gray-700"
+                }`}>
+                  {scoreChange > 0 ? "+" : ""}{scoreChange} pts
+                </div>
+              </div>
+              {submission.reEvaluation!.analysis.reEvaluationNotes && (
+                <p className="text-sm text-purple-700 bg-white p-2 rounded">
+                  <strong>Notes:</strong> {submission.reEvaluation!.analysis.reEvaluationNotes}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Scores Grid */}
+          {/* Executive Summary */}
           <div className="mb-6">
-            <p className="text-xs text-gray-400 font-code mb-3">Category Scores</p>
+            <p className="text-xs text-gray-400 font-code mb-2">
+              Executive Summary {hasReEval && "(Updated)"}
+            </p>
+            <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+              {hasReEval
+                ? submission.reEvaluation!.analysis.executiveSummary
+                : submission.analysis.executiveSummary || "N/A"}
+            </p>
+          </div>
+
+          {/* Scores Grid - Show current (re-evaluated if available) */}
+          <div className="mb-6">
+            <p className="text-xs text-gray-400 font-code mb-3">
+              Category Scores {hasReEval && "(Re-evaluated)"}
+            </p>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {Object.entries(submission.analysis.scores).map(([key, value]) => (
-                <div key={key} className="bg-gray-50 p-2 rounded-lg">
-                  <p className="text-xs text-gray-500 font-code truncate">
-                    {SCORE_LABELS[key] || key}
-                  </p>
-                  <p className={`text-lg font-semibold ${value >= 70 ? "text-emerald-600" : value >= 50 ? "text-amber-600" : "text-red-600"}`}>
-                    {value}%
-                  </p>
-                </div>
-              ))}
+              {Object.entries(
+                hasReEval ? submission.reEvaluation!.analysis.scores : submission.analysis.scores
+              ).map(([key, value]) => {
+                const initialValue = submission.analysis.scores[key];
+                const diff = hasReEval ? value - initialValue : 0;
+                return (
+                  <div key={key} className="bg-gray-50 p-2 rounded-lg">
+                    <p className="text-xs text-gray-500 font-code truncate">
+                      {SCORE_LABELS[key] || key}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <p className={`text-lg font-semibold ${value >= 70 ? "text-emerald-600" : value >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                        {value}%
+                      </p>
+                      {hasReEval && diff !== 0 && (
+                        <span className={`text-xs ${diff > 0 ? "text-emerald-500" : "text-red-500"}`}>
+                          {diff > 0 ? "+" : ""}{diff}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -452,7 +573,7 @@ function SubmissionCard({
             <div>
               <p className="text-xs text-gray-400 font-code mb-2">Key Strengths</p>
               <ul className="space-y-1">
-                {submission.analysis.strengths?.map((s, i) => (
+                {(hasReEval ? submission.reEvaluation!.analysis.strengths : submission.analysis.strengths)?.map((s, i) => (
                   <li key={i} className="text-sm text-gray-700 flex gap-2">
                     <span className="text-emerald-500">+</span>
                     {s}
@@ -463,7 +584,7 @@ function SubmissionCard({
             <div>
               <p className="text-xs text-gray-400 font-code mb-2">Areas to Improve</p>
               <ul className="space-y-1">
-                {submission.analysis.improvements?.map((s, i) => (
+                {(hasReEval ? submission.reEvaluation!.analysis.improvements : submission.analysis.improvements)?.map((s, i) => (
                   <li key={i} className="text-sm text-gray-700 flex gap-2">
                     <span className="text-amber-500">→</span>
                     {s}
@@ -473,20 +594,23 @@ function SubmissionCard({
             </div>
           </div>
 
-          {/* Additional Docs */}
-          {submission.additionalDocs.length > 0 && (
+          {/* Additional Documents with Downloads */}
+          {submission.additionalDocsFiles && submission.additionalDocsFiles.length > 0 && (
             <div className="mb-6">
               <p className="text-xs text-gray-400 font-code mb-2">
-                Additional Documents ({submission.additionalDocs.length})
+                Additional Documents ({submission.additionalDocsFiles.length})
               </p>
               <div className="flex flex-wrap gap-2">
-                {submission.additionalDocs.map((doc, i) => (
-                  <span
+                {submission.additionalDocsFiles.map((doc, i) => (
+                  <a
                     key={i}
-                    className="px-2 py-1 bg-gray-100 rounded text-xs font-code"
+                    href={getDownloadUrl("additional", i)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-xs font-code flex items-center gap-1 transition-colors"
                   >
-                    {doc}
-                  </span>
+                    <Download className="w-3 h-3" />
+                    {doc.name}
+                  </a>
                 ))}
               </div>
             </div>
