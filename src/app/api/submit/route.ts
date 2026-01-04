@@ -199,7 +199,7 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 
 async function analyzeWithAI(content: string): Promise<Record<string, unknown>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4.5";
+  const model = process.env.OPENROUTER_MODEL || "openai/gpt-5.2-pro";
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
@@ -225,7 +225,7 @@ async function analyzeWithAI(content: string): Promise<Record<string, unknown>> 
       temperature: 0,
       max_tokens: 8000,
       provider: {
-        order: ["anthropic"],
+        order: ["openai"],
         allow_fallbacks: false,
       },
     }),
