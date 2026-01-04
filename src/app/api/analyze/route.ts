@@ -480,7 +480,7 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 
 async function callOpenRouter(content: string): Promise<unknown> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4-5";
+  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-opus-4.5";
 
   console.log("[API] Checking API key...");
   if (!apiKey) {
