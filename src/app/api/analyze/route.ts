@@ -512,6 +512,10 @@ async function callOpenRouter(content: string): Promise<unknown> {
       ],
       temperature: 0,
       max_tokens: 8000,
+      provider: {
+        order: ["anthropic"],
+        allow_fallbacks: false,
+      },
     }),
   });
 

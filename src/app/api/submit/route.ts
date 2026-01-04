@@ -224,6 +224,10 @@ async function analyzeWithAI(content: string): Promise<Record<string, unknown>> 
       ],
       temperature: 0,
       max_tokens: 8000,
+      provider: {
+        order: ["anthropic"],
+        allow_fallbacks: false,
+      },
     }),
   });
 

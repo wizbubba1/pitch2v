@@ -196,6 +196,10 @@ async function reEvaluateWithAI(
       ],
       temperature: 0,
       max_tokens: 10000,
+      provider: {
+        order: ["anthropic"],
+        allow_fallbacks: false,
+      },
     }),
   });
 
