@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "pitch2v - Deck Alignment Analysis",
-  description: "Check if your pitch deck aligns with Vitruvius Venture Studios",
+  description: "Check if your pitch deck aligns with Vitruvius Venture Studio",
 };
 
 export default function RootLayout({

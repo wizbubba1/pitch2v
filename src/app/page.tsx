@@ -379,7 +379,7 @@ export default function Home() {
           <h1 className="text-4xl font-semibold tracking-tight mb-4">
             Submit Your Pitch to
             <br />
-            <span className="text-[#4da6e8]">Vitruvius Venture Studios</span>
+            <span className="text-[#4da6e8]">Vitruvius Venture Studio</span>
           </h1>
           <p className="font-code text-sm text-gray-600 max-w-2xl leading-relaxed">
             Upload your pitch deck and we&apos;ll evaluate alignment with our
@@ -619,7 +619,7 @@ function Footer() {
     <footer className="border-t border-gray-100 mt-20">
       <div className="max-w-7xl mx-auto px-6 py-8">
         <p className="font-code text-xs text-gray-400 text-center">
-          pitch2v is a submission portal for Vitruvius Venture Studios.
+          pitch2v is a submission portal for Vitruvius Venture Studio.
           Your data is processed securely and reviewed by our team.
         </p>
       </div>

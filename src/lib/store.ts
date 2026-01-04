@@ -12,10 +12,20 @@ export interface AnalysisResult {
   improvements: string[];
   portfolioSynergies?: string[];
   nextSteps?: string[];
+  reEvaluationNotes?: string;
   dreamCreateDeliver?: {
     dream: string;
     create: string;
     deliver: string;
+  };
+  // Detailed AI reasoning for each category
+  detailedReasoning?: {
+    overview: string; // Overall reasoning about the pitch
+    documentComprehension: string; // What the AI understood from the documents
+    scoringRationale: Record<string, string>; // Detailed rationale for each category score
+    keyInsights: string[]; // Critical insights discovered
+    concerns: string[]; // Concerns or red flags
+    finalThoughts: string; // Concluding analysis
   };
 }
 

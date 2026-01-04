@@ -24,7 +24,20 @@ import {
   Upload,
   Plus,
   X,
+  Brain,
+  Lightbulb,
+  AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
+
+interface DetailedReasoning {
+  overview: string;
+  documentComprehension: string;
+  scoringRationale: Record<string, string>;
+  keyInsights: string[];
+  concerns: string[];
+  finalThoughts: string;
+}
 
 interface AnalysisResult {
   startupName?: string;
@@ -49,6 +62,7 @@ interface AnalysisResult {
     create: string;
     deliver: string;
   };
+  detailedReasoning?: DetailedReasoning;
 }
 
 interface StoredFile {
@@ -364,6 +378,7 @@ function SubmissionCard({
   const [adminFiles, setAdminFiles] = useState<File[]>([]);
   const [isReEvaluating, setIsReEvaluating] = useState(false);
   const [reEvalError, setReEvalError] = useState<string | null>(null);
+  const [showThinking, setShowThinking] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialScore = submission.analysis.overallScore;
@@ -746,6 +761,19 @@ function SubmissionCard({
             </div>
           )}
 
+          {/* AI Thinking Button */}
+          {displayAnalysis.detailedReasoning && (
+            <div className="mb-6">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowThinking(true); }}
+                className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg text-sm font-code hover:from-indigo-600 hover:to-purple-700 transition-all flex items-center justify-center gap-2 shadow-md"
+              >
+                <Brain className="w-5 h-5" />
+                View AI Thinking & Reasoning
+              </button>
+            </div>
+          )}
+
           {/* Admin Re-Evaluation Section */}
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center gap-2 mb-3">
@@ -841,6 +869,130 @@ function SubmissionCard({
             >
               Reject
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* AI Thinking Slide-Out Panel */}
+      {showThinking && displayAnalysis.detailedReasoning && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex justify-end"
+          onClick={() => setShowThinking(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-white h-full overflow-y-auto shadow-2xl animate-slide-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Panel Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-700 text-white p-6 z-10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Brain className="w-6 h-6" />
+                  <div>
+                    <h2 className="text-lg font-semibold">AI Thinking Transcript</h2>
+                    <p className="text-sm text-white/80 font-code">
+                      {viewMode === "reeval" && hasReEval ? "Re-evaluation Analysis" : "Initial Analysis"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowThinking(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Panel Content */}
+            <div className="p-6 space-y-6">
+              {/* Overview */}
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <MessageSquare className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-semibold text-gray-900">Overview</h3>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {displayAnalysis.detailedReasoning.overview}
+                </div>
+              </section>
+
+              {/* Document Comprehension */}
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-semibold text-gray-900">Document Comprehension</h3>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {displayAnalysis.detailedReasoning.documentComprehension}
+                </div>
+              </section>
+
+              {/* Scoring Rationale */}
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <BarChart3 className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-semibold text-gray-900">Scoring Rationale</h3>
+                </div>
+                <div className="space-y-3">
+                  {Object.entries(displayAnalysis.detailedReasoning.scoringRationale).map(([key, value]) => (
+                    <div key={key} className="bg-gray-50 p-3 rounded-lg">
+                      <p className="text-xs text-indigo-600 font-code font-semibold mb-1">
+                        {SCORE_LABELS[key] || key}
+                      </p>
+                      <p className="text-sm text-gray-700">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Key Insights */}
+              {displayAnalysis.detailedReasoning.keyInsights?.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lightbulb className="w-5 h-5 text-amber-500" />
+                    <h3 className="font-semibold text-gray-900">Key Insights</h3>
+                  </div>
+                  <ul className="space-y-2">
+                    {displayAnalysis.detailedReasoning.keyInsights.map((insight, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-gray-700 bg-amber-50 p-3 rounded-lg">
+                        <span className="text-amber-500 font-bold">💡</span>
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* Concerns */}
+              {displayAnalysis.detailedReasoning.concerns?.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500" />
+                    <h3 className="font-semibold text-gray-900">Concerns & Red Flags</h3>
+                  </div>
+                  <ul className="space-y-2">
+                    {displayAnalysis.detailedReasoning.concerns.map((concern, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-gray-700 bg-red-50 p-3 rounded-lg">
+                        <span className="text-red-500 font-bold">⚠️</span>
+                        {concern}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* Final Thoughts */}
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="w-5 h-5 text-purple-600" />
+                  <h3 className="font-semibold text-gray-900">Final Thoughts</h3>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg text-sm text-gray-700 leading-relaxed whitespace-pre-wrap border-l-4 border-purple-500">
+                  {displayAnalysis.detailedReasoning.finalThoughts}
+                </div>
+              </section>
+            </div>
           </div>
         </div>
       )}

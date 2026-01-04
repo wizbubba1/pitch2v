@@ -148,6 +148,25 @@ Respond with a valid JSON object:
     "dream": "<vision assessment>",
     "create": "<acceleration potential>",
     "deliver": "<market path assessment>"
+  },
+  "detailedReasoning": {
+    "overview": "<2-3 paragraphs explaining your overall thinking about this pitch, what stood out, and your general assessment approach>",
+    "documentComprehension": "<detailed explanation of what you understood from the pitch deck - key claims, data points, team info, product details, market assertions. This proves you read and understood the content thoroughly>",
+    "scoringRationale": {
+      "visionFit": "<why you gave this score - specific evidence from the deck>",
+      "marketGTM": "<why you gave this score - specific evidence from the deck>",
+      "scientificRigor": "<why you gave this score - specific evidence from the deck>",
+      "technicalFeasibility": "<why you gave this score - specific evidence from the deck>",
+      "complianceEthics": "<why you gave this score - specific evidence from the deck>",
+      "teamExecution": "<why you gave this score - specific evidence from the deck>",
+      "ipDefensibility": "<why you gave this score - specific evidence from the deck>",
+      "tractionValidation": "<why you gave this score - specific evidence from the deck>",
+      "fundingReadiness": "<why you gave this score - specific evidence from the deck>",
+      "scalabilityPotential": "<why you gave this score - specific evidence from the deck>"
+    },
+    "keyInsights": ["<critical insight 1>", "<critical insight 2>", "..."],
+    "concerns": ["<concern or red flag 1>", "<concern or red flag 2>", "..."],
+    "finalThoughts": "<your concluding analysis and reasoning for the overall recommendation>"
   }
 }
 
