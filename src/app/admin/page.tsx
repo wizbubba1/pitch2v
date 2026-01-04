@@ -354,10 +354,17 @@ function SubmissionCard({
   getStatusBadge: (status: string) => string;
   password: string;
 }) {
+  const [viewMode, setViewMode] = useState<"initial" | "reeval">("reeval");
+
   const initialScore = submission.analysis.overallScore;
   const hasReEval = !!submission.reEvaluation;
   const currentScore = hasReEval ? submission.reEvaluation!.analysis.overallScore : initialScore;
   const scoreChange = hasReEval ? currentScore - initialScore : 0;
+
+  // Which analysis to display based on toggle
+  const displayAnalysis = hasReEval && viewMode === "reeval"
+    ? submission.reEvaluation!.analysis
+    : submission.analysis;
 
   const getDownloadUrl = (type: "pitch" | "additional", index = 0) => {
     return `/api/admin/download?id=${submission.id}&type=${type}&index=${index}&password=${encodeURIComponent(password)}`;
@@ -484,15 +491,17 @@ function SubmissionCard({
             </div>
           </div>
 
-          {/* Re-evaluation Score Comparison */}
+          {/* Re-evaluation Score Comparison & Toggle */}
           {hasReEval && (
             <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <div className="flex items-center gap-2 mb-3">
-                <RotateCcw className="w-4 h-4 text-purple-600" />
-                <p className="text-sm font-semibold text-purple-800">Re-Evaluation Results</p>
-                <span className="text-xs text-purple-600 font-code">
-                  {new Date(submission.reEvaluation!.evaluatedAt).toLocaleString()}
-                </span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-purple-600" />
+                  <p className="text-sm font-semibold text-purple-800">Re-Evaluation Results</p>
+                  <span className="text-xs text-purple-600 font-code">
+                    {new Date(submission.reEvaluation!.evaluatedAt).toLocaleString()}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-6 mb-3">
                 <div className="text-center">
@@ -517,36 +526,66 @@ function SubmissionCard({
                 </div>
               </div>
               {submission.reEvaluation!.analysis.reEvaluationNotes && (
-                <p className="text-sm text-purple-700 bg-white p-2 rounded">
+                <p className="text-sm text-purple-700 bg-white p-2 rounded mb-3">
                   <strong>Notes:</strong> {submission.reEvaluation!.analysis.reEvaluationNotes}
                 </p>
               )}
+              {/* Toggle to switch between initial and re-evaluated analysis */}
+              <div className="flex gap-2 pt-2 border-t border-purple-200">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setViewMode("initial"); }}
+                  className={`px-3 py-1.5 rounded text-xs font-code transition-colors ${
+                    viewMode === "initial"
+                      ? "bg-purple-600 text-white"
+                      : "bg-white text-purple-700 hover:bg-purple-100"
+                  }`}
+                >
+                  View Initial Analysis
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setViewMode("reeval"); }}
+                  className={`px-3 py-1.5 rounded text-xs font-code transition-colors ${
+                    viewMode === "reeval"
+                      ? "bg-purple-600 text-white"
+                      : "bg-white text-purple-700 hover:bg-purple-100"
+                  }`}
+                >
+                  View Re-Evaluation
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Analysis View Label */}
+          {hasReEval && (
+            <div className="mb-4 flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${viewMode === "reeval" ? "bg-purple-500" : "bg-gray-400"}`} />
+              <p className="text-sm font-medium text-gray-600">
+                {viewMode === "reeval" ? "Showing Re-Evaluation (with additional docs)" : "Showing Initial Analysis (pitch deck only)"}
+              </p>
             </div>
           )}
 
           {/* Executive Summary */}
           <div className="mb-6">
             <p className="text-xs text-gray-400 font-code mb-2">
-              Executive Summary {hasReEval && "(Updated)"}
+              Executive Summary
             </p>
             <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
-              {hasReEval
-                ? submission.reEvaluation!.analysis.executiveSummary
-                : submission.analysis.executiveSummary || "N/A"}
+              {displayAnalysis.executiveSummary || "N/A"}
             </p>
           </div>
 
-          {/* Scores Grid - Show current (re-evaluated if available) */}
+          {/* Scores Grid */}
           <div className="mb-6">
             <p className="text-xs text-gray-400 font-code mb-3">
-              Category Scores {hasReEval && "(Re-evaluated)"}
+              Category Scores
             </p>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {Object.entries(
-                hasReEval ? submission.reEvaluation!.analysis.scores : submission.analysis.scores
-              ).map(([key, value]) => {
+              {Object.entries(displayAnalysis.scores).map(([key, value]) => {
                 const initialValue = submission.analysis.scores[key];
-                const diff = hasReEval ? value - initialValue : 0;
+                const reEvalValue = hasReEval ? submission.reEvaluation!.analysis.scores[key] : value;
+                const diff = hasReEval ? reEvalValue - initialValue : 0;
                 return (
                   <div key={key} className="bg-gray-50 p-2 rounded-lg">
                     <p className="text-xs text-gray-500 font-code truncate">
@@ -558,7 +597,7 @@ function SubmissionCard({
                       </p>
                       {hasReEval && diff !== 0 && (
                         <span className={`text-xs ${diff > 0 ? "text-emerald-500" : "text-red-500"}`}>
-                          {diff > 0 ? "+" : ""}{diff}
+                          ({diff > 0 ? "+" : ""}{diff})
                         </span>
                       )}
                     </div>
@@ -573,7 +612,7 @@ function SubmissionCard({
             <div>
               <p className="text-xs text-gray-400 font-code mb-2">Key Strengths</p>
               <ul className="space-y-1">
-                {(hasReEval ? submission.reEvaluation!.analysis.strengths : submission.analysis.strengths)?.map((s, i) => (
+                {displayAnalysis.strengths?.map((s, i) => (
                   <li key={i} className="text-sm text-gray-700 flex gap-2">
                     <span className="text-emerald-500">+</span>
                     {s}
@@ -584,7 +623,7 @@ function SubmissionCard({
             <div>
               <p className="text-xs text-gray-400 font-code mb-2">Areas to Improve</p>
               <ul className="space-y-1">
-                {(hasReEval ? submission.reEvaluation!.analysis.improvements : submission.analysis.improvements)?.map((s, i) => (
+                {displayAnalysis.improvements?.map((s, i) => (
                   <li key={i} className="text-sm text-gray-700 flex gap-2">
                     <span className="text-amber-500">→</span>
                     {s}
@@ -593,6 +632,36 @@ function SubmissionCard({
               </ul>
             </div>
           </div>
+
+          {/* Portfolio Synergies - if available */}
+          {displayAnalysis.portfolioSynergies && displayAnalysis.portfolioSynergies.length > 0 && (
+            <div className="mb-6">
+              <p className="text-xs text-gray-400 font-code mb-2">Portfolio Synergies</p>
+              <ul className="space-y-1">
+                {displayAnalysis.portfolioSynergies.map((s, i) => (
+                  <li key={i} className="text-sm text-gray-700 flex gap-2">
+                    <span className="text-blue-500">◆</span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Next Steps - if available */}
+          {displayAnalysis.nextSteps && displayAnalysis.nextSteps.length > 0 && (
+            <div className="mb-6">
+              <p className="text-xs text-gray-400 font-code mb-2">Recommended Next Steps</p>
+              <ul className="space-y-1">
+                {displayAnalysis.nextSteps.map((s, i) => (
+                  <li key={i} className="text-sm text-gray-700 flex gap-2">
+                    <span className="text-[#4da6e8]">{i + 1}.</span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Additional Documents with Downloads */}
           {submission.additionalDocsFiles && submission.additionalDocsFiles.length > 0 && (
