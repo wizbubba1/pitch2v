@@ -153,12 +153,28 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   return text;
 }
 
+// Available models for admin to choose from
+const AVAILABLE_MODELS = [
+  { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "anthropic" },
+  { id: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5", provider: "anthropic" },
+  { id: "openai/gpt-5.2-pro", name: "GPT 5.2 Pro", provider: "openai" },
+  { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
+];
+
+function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks: boolean } {
+  const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+  if (model) {
+    return { order: [model.provider], allow_fallbacks: false };
+  }
+  return { order: ["anthropic"], allow_fallbacks: false };
+}
+
 async function reEvaluateWithAI(
   pitchDeckText: string,
-  additionalDocsTexts: { name: string; text: string }[]
+  additionalDocsTexts: { name: string; text: string }[],
+  modelId: string
 ): Promise<Record<string, unknown>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "openai/gpt-5.2-pro";
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
@@ -177,6 +193,8 @@ async function reEvaluateWithAI(
     combinedContent = combinedContent.substring(0, 120000) + "\n\n[Content truncated...]";
   }
 
+  const providerConfig = getProviderConfig(modelId);
+
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -186,7 +204,7 @@ async function reEvaluateWithAI(
       "X-Title": "pitch2v - Vitruvius Admin Re-evaluation",
     },
     body: JSON.stringify({
-      model: model,
+      model: modelId,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -196,10 +214,7 @@ async function reEvaluateWithAI(
       ],
       temperature: 0,
       max_tokens: 10000,
-      provider: {
-        order: ["openai"],
-        allow_fallbacks: false,
-      },
+      provider: providerConfig,
     }),
   });
 
@@ -237,6 +252,11 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const submissionId = formData.get("submissionId") as string;
+    const modelId = formData.get("model") as string || "anthropic/claude-sonnet-4";
+
+    // Validate model
+    const selectedModel = AVAILABLE_MODELS.find(m => m.id === modelId)?.id || "anthropic/claude-sonnet-4";
+    const modelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel);
 
     if (!submissionId) {
       return NextResponse.json(
@@ -305,14 +325,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the score to compare against (use re-eval score if exists, otherwise initial)
+    // Get the score to compare against (use re-eval score if exists, otherwise initial, otherwise 0)
     const previousScore = submission.reEvaluation
       ? submission.reEvaluation.analysis.overallScore
-      : submission.analysis.overallScore;
+      : (submission.analysis?.overallScore || 0);
 
     // Re-run AI analysis with combined documents
-    console.log(`[ADMIN-REEVAL] Re-evaluating submission ${submissionId} with ${additionalFiles.length} admin docs...`);
-    const reEvalAnalysis = await reEvaluateWithAI(originalPitchText, additionalTexts);
+    console.log(`[ADMIN-REEVAL] Re-evaluating submission ${submissionId} with ${additionalFiles.length} admin docs using model: ${selectedModel}...`);
+    const reEvalAnalysis = await reEvaluateWithAI(originalPitchText, additionalTexts, selectedModel);
     console.log(`[ADMIN-REEVAL] Complete. New score: ${reEvalAnalysis.overallScore} (was: ${previousScore})`);
 
     // Combine with any existing additional docs
@@ -329,6 +349,7 @@ export async function POST(request: NextRequest) {
         analysis: reEvalAnalysis as unknown as AnalysisResult,
         evaluatedAt: new Date().toISOString(),
         combinedDocuments: combinedDocNames,
+        modelUsed: selectedModel,
       },
       status: "re-evaluated",
     });
@@ -338,6 +359,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Admin re-evaluation complete",
+      model: modelInfo?.name || selectedModel,
       documentCount: additionalFiles.length,
       previousScore: previousScore,
       newScore: reEvalAnalysis.overallScore,

@@ -49,15 +49,18 @@ export interface Submission {
   fileName: string;
   fileSize: number;
   pitchDeckFile: StoredFile; // Original pitch deck with base64 data
-  analysis: AnalysisResult; // Initial analysis
+  analyzed: boolean; // Whether AI analysis has been run
+  modelUsed?: string; // Which LLM model was used for analysis
+  analysis?: AnalysisResult; // Initial analysis (optional until analyzed)
   // Re-evaluation after additional docs
   additionalDocsFiles: StoredFile[]; // Additional documents with base64 data
   reEvaluation?: {
     analysis: AnalysisResult;
     evaluatedAt: string;
-    combinedDocuments: string[]; // Names of docs included in re-evaluation
+    combinedDocuments: string[];
+    modelUsed?: string; // Which model was used for re-evaluation
   };
-  status: "pending" | "reviewing" | "accepted" | "rejected" | "additional-docs-requested" | "re-evaluated";
+  status: "awaiting-analysis" | "pending" | "reviewing" | "accepted" | "rejected" | "additional-docs-requested" | "re-evaluated";
   notes: string;
 }
 
@@ -92,17 +95,27 @@ export function getAllSubmissions(): Submission[] {
 
 export function getSubmissionsByScore(min: number, max: number): Submission[] {
   return getAllSubmissions().filter(
-    (s) => s.analysis.overallScore >= min && s.analysis.overallScore < max
+    (s) => s.analyzed && s.analysis && s.analysis.overallScore >= min && s.analysis.overallScore < max
   );
+}
+
+export function getUnanalyzedSubmissions(): Submission[] {
+  return getAllSubmissions().filter((s) => !s.analyzed);
+}
+
+export function getAnalyzedSubmissions(): Submission[] {
+  return getAllSubmissions().filter((s) => s.analyzed);
 }
 
 export function getSubmissionStats() {
   const all = getAllSubmissions();
+  const analyzed = all.filter((s) => s.analyzed && s.analysis);
   return {
     total: all.length,
-    highScore: all.filter((s) => s.analysis.overallScore >= 70).length,
-    midScore: all.filter((s) => s.analysis.overallScore >= 50 && s.analysis.overallScore < 70).length,
-    lowScore: all.filter((s) => s.analysis.overallScore < 50).length,
+    awaitingAnalysis: all.filter((s) => !s.analyzed).length,
+    highScore: analyzed.filter((s) => s.analysis!.overallScore >= 70).length,
+    midScore: analyzed.filter((s) => s.analysis!.overallScore >= 50 && s.analysis!.overallScore < 70).length,
+    lowScore: analyzed.filter((s) => s.analysis!.overallScore < 50).length,
     pending: all.filter((s) => s.status === "pending").length,
     reviewing: all.filter((s) => s.status === "reviewing").length,
     accepted: all.filter((s) => s.status === "accepted").length,

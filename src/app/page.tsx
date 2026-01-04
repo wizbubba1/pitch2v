@@ -3,11 +3,9 @@
 import { useState, useCallback, useRef } from "react";
 import {
   Upload,
-  Link as LinkIcon,
   FileText,
   Clock,
   Shield,
-  Wallet,
   CheckCircle2,
   Loader2,
   X,
@@ -16,7 +14,6 @@ import {
   Mail,
   Linkedin,
   Briefcase,
-  FileUp,
   ArrowRight,
 } from "lucide-react";
 
@@ -28,11 +25,10 @@ interface ContactInfo {
   linkedIn: string;
 }
 
-type SubmissionStage = "form" | "uploading" | "analyzing" | "submitted" | "additional-docs";
+type SubmissionStage = "form" | "uploading" | "submitted";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const [additionalDocs, setAdditionalDocs] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [stage, setStage] = useState<SubmissionStage>("form");
   const [contactInfo, setContactInfo] = useState<ContactInfo>({
@@ -43,9 +39,8 @@ export default function Home() {
     linkedIn: "",
   });
   const [submissionId, setSubmissionId] = useState<string | null>(null);
-  const [scoreRange, setScoreRange] = useState<"low" | "mid" | "high" | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const additionalDocsRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -67,6 +62,7 @@ export default function Home() {
         droppedFile.name.endsWith(".pptx"))
     ) {
       setFile(droppedFile);
+      setError(null);
     }
   }, []);
 
@@ -75,22 +71,11 @@ export default function Home() {
       const selectedFile = e.target.files?.[0];
       if (selectedFile) {
         setFile(selectedFile);
+        setError(null);
       }
     },
     []
   );
-
-  const handleAdditionalDocsSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      setAdditionalDocs((prev) => [...prev, ...files]);
-    },
-    []
-  );
-
-  const removeAdditionalDoc = (index: number) => {
-    setAdditionalDocs((prev) => prev.filter((_, i) => i !== index));
-  };
 
   const clearFile = () => {
     setFile(null);
@@ -118,13 +103,12 @@ export default function Home() {
     if (!isFormValid()) return;
 
     setStage("uploading");
+    setError(null);
 
     try {
       const formData = new FormData();
       formData.append("file", file!);
       formData.append("contactInfo", JSON.stringify(contactInfo));
-
-      setStage("analyzing");
 
       const response = await fetch("/api/submit", {
         method: "POST",
@@ -138,57 +122,12 @@ export default function Home() {
       }
 
       setSubmissionId(data.submissionId);
-
-      // Determine score range for UI flow
-      const score = data.overallScore || 0;
-      if (score < 50) {
-        setScoreRange("low");
-        setStage("submitted");
-      } else if (score >= 50 && score < 70) {
-        setScoreRange("mid");
-        setStage("additional-docs");
-      } else {
-        setScoreRange("high");
-        setStage("submitted");
-      }
-    } catch (error) {
-      console.error("Submission error:", error);
-      // For demo, show submitted anyway
-      setSubmissionId("demo-" + Date.now());
-      setScoreRange("mid");
-      setStage("additional-docs");
-    }
-  };
-
-  const handleAdditionalDocsSubmit = async () => {
-    if (additionalDocs.length === 0) {
       setStage("submitted");
-      return;
+    } catch (err) {
+      console.error("Submission error:", err);
+      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+      setStage("form");
     }
-
-    setStage("uploading");
-
-    try {
-      const formData = new FormData();
-      formData.append("submissionId", submissionId || "");
-      additionalDocs.forEach((doc, i) => {
-        formData.append(`doc_${i}`, doc);
-      });
-
-      await fetch("/api/submit-docs", {
-        method: "POST",
-        body: formData,
-      });
-
-      setStage("submitted");
-    } catch (error) {
-      console.error("Additional docs error:", error);
-      setStage("submitted");
-    }
-  };
-
-  const skipAdditionalDocs = () => {
-    setStage("submitted");
   };
 
   // Render based on stage
@@ -240,115 +179,17 @@ export default function Home() {
     );
   }
 
-  if (stage === "additional-docs") {
-    return (
-      <div className="min-h-screen bg-white">
-        <Header />
-        <main className="max-w-2xl mx-auto px-6 py-16">
-          <div className="text-center mb-10">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileUp className="w-8 h-8 text-amber-600" />
-            </div>
-            <h1 className="text-2xl font-semibold mb-3">
-              Additional Documentation Requested
-            </h1>
-            <p className="font-code text-sm text-gray-600 leading-relaxed">
-              Your submission shows promise! To help our team make a more informed
-              decision, please provide any additional documentation that supports
-              your pitch.
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="font-code text-xs text-amber-800">
-                <strong>Helpful documents include:</strong> Business whitepaper,
-                technical methodology, financial projections, clinical validation
-                data, team bios, letters of intent, or any other supporting materials.
-              </p>
-            </div>
-
-            {/* Additional Docs Upload */}
-            <div>
-              <label className="font-code text-xs text-gray-400 uppercase tracking-wider mb-3 block">
-                upload additional documents
-              </label>
-              <div
-                className="upload-zone rounded-lg p-6 text-center cursor-pointer"
-                onClick={() => additionalDocsRef.current?.click()}
-              >
-                <Upload className="w-6 h-6 text-[#4da6e8] mx-auto mb-3" />
-                <p className="font-code text-sm text-gray-600">
-                  Click to upload PDF, DOCX, or PPTX files
-                </p>
-                <input
-                  ref={additionalDocsRef}
-                  type="file"
-                  accept=".pdf,.docx,.pptx,.doc,.xls,.xlsx"
-                  multiple
-                  onChange={handleAdditionalDocsSelect}
-                  className="hidden"
-                />
-              </div>
-            </div>
-
-            {/* Uploaded Files List */}
-            {additionalDocs.length > 0 && (
-              <div className="space-y-2">
-                {additionalDocs.map((doc, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-[#4da6e8]" />
-                      <span className="font-code text-sm">{doc.name}</span>
-                    </div>
-                    <button
-                      onClick={() => removeAdditionalDoc(index)}
-                      className="p-1 hover:bg-gray-200 rounded"
-                    >
-                      <X className="w-4 h-4 text-gray-400" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-4 pt-4">
-              <button
-                onClick={skipAdditionalDocs}
-                className="flex-1 btn-secondary px-6 py-3 rounded-lg font-code text-sm"
-              >
-                Skip for now
-              </button>
-              <button
-                onClick={handleAdditionalDocsSubmit}
-                className="flex-1 btn-primary px-6 py-3 rounded-lg font-code text-sm flex items-center justify-center gap-2"
-              >
-                Submit Documents
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (stage === "uploading" || stage === "analyzing") {
+  if (stage === "uploading") {
     return (
       <div className="min-h-screen bg-white">
         <Header />
         <main className="max-w-2xl mx-auto px-6 py-32 text-center">
           <Loader2 className="w-12 h-12 text-[#4da6e8] animate-spin mx-auto mb-6" />
           <h2 className="text-xl font-semibold mb-2">
-            {stage === "uploading" ? "Uploading your pitch deck..." : "Analyzing your submission..."}
+            Uploading your pitch deck...
           </h2>
           <p className="font-code text-sm text-gray-500">
-            {stage === "analyzing" && "This may take up to a minute. Please don't close this page."}
+            This will only take a moment.
           </p>
         </main>
         <Footer />
@@ -387,6 +228,13 @@ export default function Home() {
             days and will reach out with feedback.
           </p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="font-code text-sm text-red-700">{error}</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           {/* Left Column - Contact Info */}

@@ -28,6 +28,9 @@ import {
   Lightbulb,
   AlertTriangle,
   MessageSquare,
+  Clock,
+  Play,
+  Cpu,
 } from "lucide-react";
 
 interface DetailedReasoning {
@@ -85,12 +88,15 @@ interface Submission {
   fileName: string;
   fileSize: number;
   pitchDeckFile?: StoredFile;
-  analysis: AnalysisResult;
+  analyzed: boolean;
+  modelUsed?: string;
+  analysis?: AnalysisResult;
   additionalDocsFiles?: StoredFile[];
   reEvaluation?: {
     analysis: AnalysisResult;
     evaluatedAt: string;
     combinedDocuments: string[];
+    modelUsed?: string;
   };
   status: string;
   notes: string;
@@ -98,6 +104,7 @@ interface Submission {
 
 interface Stats {
   total: number;
+  awaitingAnalysis: number;
   highScore: number;
   midScore: number;
   lowScore: number;
@@ -106,6 +113,19 @@ interface Stats {
   accepted: number;
   rejected: number;
 }
+
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: string;
+}
+
+const AVAILABLE_MODELS: ModelOption[] = [
+  { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "anthropic" },
+  { id: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5", provider: "anthropic" },
+  { id: "openai/gpt-5.2-pro", name: "GPT 5.2 Pro", provider: "openai" },
+  { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
+];
 
 const SCORE_LABELS: Record<string, string> = {
   visionFit: "Vision Fit",
@@ -127,7 +147,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "high" | "mid" | "low">("all");
+  const [filter, setFilter] = useState<"all" | "awaiting" | "high" | "mid" | "low">("all");
+  const [selectedModel, setSelectedModel] = useState<string>("anthropic/claude-sonnet-4");
 
   const fetchSubmissions = async () => {
     setLoading(true);
@@ -173,9 +194,10 @@ export default function AdminPage() {
 
   const filteredSubmissions = submissions.filter((s) => {
     if (filter === "all") return true;
-    if (filter === "high") return s.analysis.overallScore >= 70;
-    if (filter === "mid") return s.analysis.overallScore >= 50 && s.analysis.overallScore < 70;
-    if (filter === "low") return s.analysis.overallScore < 50;
+    if (filter === "awaiting") return !s.analyzed;
+    if (filter === "high") return s.analyzed && s.analysis && s.analysis.overallScore >= 70;
+    if (filter === "mid") return s.analyzed && s.analysis && s.analysis.overallScore >= 50 && s.analysis.overallScore < 70;
+    if (filter === "low") return s.analyzed && s.analysis && s.analysis.overallScore < 50;
     return true;
   });
 
@@ -193,6 +215,8 @@ export default function AdminPage() {
         return "bg-red-100 text-red-800";
       case "reviewing":
         return "bg-blue-100 text-blue-800";
+      case "awaiting-analysis":
+        return "bg-yellow-100 text-yellow-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -244,25 +268,48 @@ export default function AdminPage() {
               admin
             </span>
           </div>
-          <button
-            onClick={fetchSubmissions}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-black"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Global Model Selector */}
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="px-3 py-1.5 text-sm font-code border border-gray-200 rounded-lg focus:outline-none focus:border-[#4da6e8]"
+              >
+                {AVAILABLE_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={fetchSubmissions}
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-black"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <StatCard
               icon={<Users className="w-5 h-5" />}
               label="Total Submissions"
               value={stats.total}
               color="text-gray-600"
+            />
+            <StatCard
+              icon={<Clock className="w-5 h-5" />}
+              label="Awaiting Analysis"
+              value={stats.awaitingAnalysis}
+              color="text-yellow-600"
             />
             <StatCard
               icon={<CheckCircle className="w-5 h-5" />}
@@ -287,7 +334,7 @@ export default function AdminPage() {
 
         {/* Filter Tabs */}
         <div className="flex gap-2 mb-6">
-          {(["all", "high", "mid", "low"] as const).map((f) => (
+          {(["all", "awaiting", "high", "mid", "low"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -298,6 +345,7 @@ export default function AdminPage() {
               }`}
             >
               {f === "all" && "All"}
+              {f === "awaiting" && "Awaiting Analysis"}
               {f === "high" && "70+ (Priority)"}
               {f === "mid" && "50-70 (Review)"}
               {f === "low" && "<50 (Auto-reject)"}
@@ -326,6 +374,7 @@ export default function AdminPage() {
                 getStatusBadge={getStatusBadge}
                 password={password}
                 onReEvalComplete={fetchSubmissions}
+                selectedModel={selectedModel}
               />
             ))
           )}
@@ -364,6 +413,7 @@ function SubmissionCard({
   getStatusBadge,
   password,
   onReEvalComplete,
+  selectedModel,
 }: {
   submission: Submission;
   isExpanded: boolean;
@@ -373,15 +423,19 @@ function SubmissionCard({
   getStatusBadge: (status: string) => string;
   password: string;
   onReEvalComplete: () => void;
+  selectedModel: string;
 }) {
   const [viewMode, setViewMode] = useState<"initial" | "reeval">("reeval");
   const [adminFiles, setAdminFiles] = useState<File[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isReEvaluating, setIsReEvaluating] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [reEvalError, setReEvalError] = useState<string | null>(null);
   const [showThinking, setShowThinking] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const initialScore = submission.analysis.overallScore;
+  const isAnalyzed = submission.analyzed && submission.analysis;
+  const initialScore = submission.analysis?.overallScore || 0;
   const hasReEval = !!submission.reEvaluation;
   const currentScore = hasReEval ? submission.reEvaluation!.analysis.overallScore : initialScore;
   const scoreChange = hasReEval ? currentScore - initialScore : 0;
@@ -406,6 +460,37 @@ function SubmissionCard({
     setAdminFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      const response = await fetch("/api/admin/analyze", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${password}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          submissionId: submission.id,
+          model: selectedModel,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Analysis failed");
+      }
+
+      onReEvalComplete();
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleAdminReEval = async () => {
     if (adminFiles.length === 0) return;
 
@@ -415,6 +500,7 @@ function SubmissionCard({
     try {
       const formData = new FormData();
       formData.append("submissionId", submission.id);
+      formData.append("model", selectedModel);
       adminFiles.forEach((file, i) => {
         formData.append(`doc_${i}`, file);
       });
@@ -446,6 +532,134 @@ function SubmissionCard({
     }
   };
 
+  // Render unanalyzed submission card
+  if (!isAnalyzed) {
+    return (
+      <div className="bg-white rounded-xl border border-yellow-200 overflow-hidden">
+        {/* Header */}
+        <div
+          className="p-4 flex items-center justify-between cursor-pointer hover:bg-yellow-50"
+          onClick={onToggle}
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-lg flex items-center justify-center bg-yellow-100">
+              <Clock className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold flex items-center gap-2">
+                {submission.contactInfo.companyName}
+                <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded font-code">
+                  Awaiting Analysis
+                </span>
+              </h3>
+              <p className="text-sm text-gray-500 font-code">
+                {submission.contactInfo.name} · {submission.contactInfo.companyRole}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400 font-code">
+              {new Date(submission.createdAt).toLocaleDateString()}
+            </span>
+            {isExpanded ? (
+              <ChevronUp className="w-5 h-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            )}
+          </div>
+        </div>
+
+        {/* Expanded Content */}
+        {isExpanded && (
+          <div className="border-t border-yellow-200 p-6">
+            {/* Contact Info */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div>
+                <p className="text-xs text-gray-400 font-code mb-1">Email</p>
+                <a
+                  href={`mailto:${submission.contactInfo.email}`}
+                  className="text-sm text-[#4da6e8] flex items-center gap-1"
+                >
+                  <Mail className="w-3 h-3" />
+                  {submission.contactInfo.email}
+                </a>
+              </div>
+              {submission.contactInfo.linkedIn && (
+                <div>
+                  <p className="text-xs text-gray-400 font-code mb-1">LinkedIn</p>
+                  <a
+                    href={submission.contactInfo.linkedIn}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-[#4da6e8] flex items-center gap-1"
+                  >
+                    <Linkedin className="w-3 h-3" />
+                    Profile
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-gray-400 font-code mb-1">Pitch Deck</p>
+                <a
+                  href={getDownloadUrl("pitch")}
+                  className="text-sm text-[#4da6e8] flex items-center gap-1 hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Download className="w-3 h-3" />
+                  {submission.fileName}
+                </a>
+              </div>
+            </div>
+
+            {/* Analysis Section */}
+            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Play className="w-5 h-5 text-yellow-600" />
+                  <p className="font-semibold text-yellow-800">Run AI Analysis</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-500 font-code">
+                  <Cpu className="w-3 h-3" />
+                  Using: {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name}
+                </div>
+              </div>
+
+              <p className="text-sm text-yellow-700 mb-4">
+                This submission has not been analyzed yet. Click below to run the AI analysis.
+              </p>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); handleAnalyze(); }}
+                disabled={isAnalyzing}
+                className="w-full px-4 py-3 bg-yellow-600 text-white rounded-lg font-code text-sm hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Running Analysis...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Analyze with {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name}
+                  </>
+                )}
+              </button>
+
+              {analysisError && (
+                <div className="mt-3 p-2 bg-red-100 border border-red-200 rounded text-sm text-red-700">
+                  {analysisError}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Render analyzed submission card
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
       {/* Header */}
@@ -485,7 +699,7 @@ function SubmissionCard({
           </div>
           <div>
             <h3 className="font-semibold flex items-center gap-2">
-              {submission.analysis.startupName || submission.contactInfo.companyName}
+              {displayAnalysis?.startupName || submission.contactInfo.companyName}
               {hasReEval && (
                 <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded font-code">
                   Re-evaluated
@@ -495,6 +709,12 @@ function SubmissionCard({
             <p className="text-sm text-gray-500 font-code">
               {submission.contactInfo.name} · {submission.contactInfo.companyRole}
             </p>
+            {submission.modelUsed && (
+              <p className="text-xs text-gray-400 font-code flex items-center gap-1 mt-0.5">
+                <Cpu className="w-3 h-3" />
+                {AVAILABLE_MODELS.find(m => m.id === submission.modelUsed)?.name || submission.modelUsed}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -517,7 +737,7 @@ function SubmissionCard({
       </div>
 
       {/* Expanded Content */}
-      {isExpanded && (
+      {isExpanded && displayAnalysis && (
         <div className="border-t border-gray-100 p-6">
           {/* Contact Info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -560,9 +780,7 @@ function SubmissionCard({
             <div>
               <p className="text-xs text-gray-400 font-code mb-1">Recommendation</p>
               <p className="text-sm font-medium">
-                {hasReEval
-                  ? submission.reEvaluation!.analysis.recommendation
-                  : submission.analysis.recommendation || "N/A"}
+                {displayAnalysis.recommendation || "N/A"}
               </p>
             </div>
           </div>
@@ -578,6 +796,12 @@ function SubmissionCard({
                     {new Date(submission.reEvaluation!.evaluatedAt).toLocaleString()}
                   </span>
                 </div>
+                {submission.reEvaluation?.modelUsed && (
+                  <span className="text-xs text-purple-600 font-code flex items-center gap-1">
+                    <Cpu className="w-3 h-3" />
+                    {AVAILABLE_MODELS.find(m => m.id === submission.reEvaluation?.modelUsed)?.name || submission.reEvaluation.modelUsed}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-6 mb-3">
                 <div className="text-center">
@@ -658,8 +882,8 @@ function SubmissionCard({
               Category Scores
             </p>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {Object.entries(displayAnalysis.scores).map(([key, value]) => {
-                const initialValue = submission.analysis.scores[key];
+              {Object.entries(displayAnalysis.scores || {}).map(([key, value]) => {
+                const initialValue = submission.analysis?.scores?.[key] || 0;
                 const reEvalValue = hasReEval ? submission.reEvaluation!.analysis.scores[key] : value;
                 const diff = hasReEval ? reEvalValue - initialValue : 0;
                 return (
@@ -776,9 +1000,15 @@ function SubmissionCard({
 
           {/* Admin Re-Evaluation Section */}
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Upload className="w-4 h-4 text-blue-600" />
-              <p className="text-sm font-semibold text-blue-800">Admin Re-Evaluation</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-blue-600" />
+                <p className="text-sm font-semibold text-blue-800">Re-Evaluate with Additional Docs</p>
+              </div>
+              <span className="text-xs text-blue-600 font-code flex items-center gap-1">
+                <Cpu className="w-3 h-3" />
+                Using: {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name}
+              </span>
             </div>
             <p className="text-xs text-blue-600 mb-3">
               Upload additional documentation to trigger a new AI analysis combining all materials.
@@ -874,7 +1104,7 @@ function SubmissionCard({
       )}
 
       {/* AI Thinking Slide-Out Panel */}
-      {showThinking && displayAnalysis.detailedReasoning && (
+      {showThinking && displayAnalysis?.detailedReasoning && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex justify-end"
           onClick={() => setShowThinking(false)}
@@ -956,7 +1186,7 @@ function SubmissionCard({
                   <ul className="space-y-2">
                     {displayAnalysis.detailedReasoning.keyInsights.map((insight, i) => (
                       <li key={i} className="flex gap-2 text-sm text-gray-700 bg-amber-50 p-3 rounded-lg">
-                        <span className="text-amber-500 font-bold">💡</span>
+                        <span className="text-amber-500 font-bold">*</span>
                         {insight}
                       </li>
                     ))}
@@ -974,7 +1204,7 @@ function SubmissionCard({
                   <ul className="space-y-2">
                     {displayAnalysis.detailedReasoning.concerns.map((concern, i) => (
                       <li key={i} className="flex gap-2 text-sm text-gray-700 bg-red-50 p-3 rounded-lg">
-                        <span className="text-red-500 font-bold">⚠️</span>
+                        <span className="text-red-500 font-bold">!</span>
                         {concern}
                       </li>
                     ))}
