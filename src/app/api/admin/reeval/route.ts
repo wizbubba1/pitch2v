@@ -158,7 +158,7 @@ const AVAILABLE_MODELS = [
   { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "anthropic" },
   { id: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5", provider: "anthropic" },
   { id: "openai/gpt-5.2-pro", name: "GPT 5.2 Pro", provider: "openai" },
-  { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "google" },
+  { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
 ];
 
 function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks: boolean } {
