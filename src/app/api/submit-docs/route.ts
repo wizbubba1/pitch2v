@@ -294,10 +294,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get previous score (if analysis exists)
+    const previousScore = submission.analysis?.overallScore || 0;
+
     // Re-run AI analysis with combined documents
     console.log(`[DOCS] Re-evaluating submission ${submissionId} with ${additionalFiles.length} additional docs...`);
     const reEvalAnalysis = await reEvaluateWithAI(originalPitchText, additionalTexts);
-    console.log(`[DOCS] Re-evaluation complete. New score: ${reEvalAnalysis.overallScore} (was: ${submission.analysis.overallScore})`);
+    console.log(`[DOCS] Re-evaluation complete. New score: ${reEvalAnalysis.overallScore} (was: ${previousScore})`);
 
     // Update submission with additional docs and re-evaluation
     const allAdditionalDocs = [...(submission.additionalDocsFiles || []), ...additionalFiles];
@@ -319,9 +322,9 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Documents received and re-evaluation complete",
       documentCount: additionalFiles.length,
-      previousScore: submission.analysis.overallScore,
+      previousScore: previousScore,
       newScore: reEvalAnalysis.overallScore,
-      scoreChange: (reEvalAnalysis.overallScore as number) - submission.analysis.overallScore,
+      scoreChange: (reEvalAnalysis.overallScore as number) - previousScore,
     });
   } catch (error) {
     console.error("Additional docs error:", error);
