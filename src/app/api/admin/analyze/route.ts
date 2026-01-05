@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSubmission, updateSubmission, AnalysisResult } from "@/lib/store";
+import { getSubmission, addAnalysisRun, generateRunId, AnalysisResult, ANALYST_PERSONAS } from "@/lib/store";
 
 // Available models for admin to choose from
 export const AVAILABLE_MODELS = [
@@ -9,7 +9,7 @@ export const AVAILABLE_MODELS = [
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
 ];
 
-const SYSTEM_PROMPT = `# Pitch2V AI Agent System Prompt
+const BASE_SYSTEM_PROMPT = `# Pitch2V AI Agent System Prompt
 ## Vitruvius Venture Studio — Pitch Deck Evaluation Framework (10 Categories)
 
 ---
@@ -209,20 +209,39 @@ function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks:
   return undefined;
 }
 
-async function analyzeWithAI(content: string, modelId: string): Promise<Record<string, unknown>> {
+function buildSystemPrompt(analystId?: string): string {
+  if (!analystId) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  const analyst = ANALYST_PERSONAS.find(a => a.id === analystId);
+  if (!analyst) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  // Prepend the analyst's behavioral prompt to the base system prompt
+  return `${analyst.behavioralPrompt}
+
+---
+
+${BASE_SYSTEM_PROMPT}`;
+}
+
+async function analyzeWithAI(content: string, modelId: string, analystId?: string): Promise<Record<string, unknown>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not configured");
   }
 
+  const systemPrompt = buildSystemPrompt(analystId);
   const providerConfig = getProviderConfig(modelId);
 
   // Build request body - only include provider if it's defined
   const requestBody: Record<string, unknown> = {
     model: modelId,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: `Analyze this pitch deck and respond ONLY with the JSON object:\n\n${content}`,
@@ -281,7 +300,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { submissionId, model } = body;
+    const { submissionId, model, analystId } = body;
 
     if (!submissionId) {
       return NextResponse.json(
@@ -293,6 +312,9 @@ export async function POST(request: NextRequest) {
     // Validate model or use default
     const selectedModel = AVAILABLE_MODELS.find(m => m.id === model)?.id || "anthropic/claude-sonnet-4";
     const modelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel);
+
+    // Validate analyst if provided
+    const selectedAnalyst = analystId ? ANALYST_PERSONAS.find(a => a.id === analystId) : undefined;
 
     const submission = getSubmission(submissionId);
     if (!submission) {
@@ -319,24 +341,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Run AI analysis
-    console.log(`[ADMIN-ANALYZE] Analyzing submission ${submissionId} with model: ${selectedModel}`);
-    const analysis = await analyzeWithAI(content, selectedModel);
+    const analystLabel = selectedAnalyst ? ` with ${selectedAnalyst.name}` : "";
+    console.log(`[ADMIN-ANALYZE] Analyzing submission ${submissionId} with model: ${selectedModel}${analystLabel}`);
+    const analysis = await analyzeWithAI(content, selectedModel, selectedAnalyst?.id);
     console.log(`[ADMIN-ANALYZE] Complete. Score: ${analysis.overallScore}`);
 
-    // Update submission with analysis
-    updateSubmission(submissionId, {
-      analyzed: true,
-      modelUsed: selectedModel,
+    // Create analysis run
+    const runId = generateRunId();
+    const run = {
+      id: runId,
+      createdAt: new Date().toISOString(),
+      modelId: selectedModel,
+      modelName: modelInfo?.name || selectedModel,
+      analystId: selectedAnalyst?.id,
+      analystName: selectedAnalyst?.name,
       analysis: analysis as unknown as AnalysisResult,
-      status: "pending", // Move from awaiting-analysis to pending (for review)
-    });
+      isKept: true, // Keep by default
+      isReEvaluation: false,
+    };
 
-    console.log(`[ADMIN-ANALYZE] Updated submission ${submissionId}`);
+    // Add the run to the submission
+    addAnalysisRun(submissionId, run);
+
+    console.log(`[ADMIN-ANALYZE] Added run ${runId} to submission ${submissionId}`);
 
     return NextResponse.json({
       success: true,
       message: "Analysis complete",
+      runId,
       model: modelInfo?.name || selectedModel,
+      analyst: selectedAnalyst?.name,
       score: analysis.overallScore,
       recommendation: analysis.recommendation,
     });
@@ -349,7 +383,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET endpoint to return available models
+// GET endpoint to return available models and analysts
 export async function GET(request: NextRequest) {
   // Check admin password
   const authHeader = request.headers.get("Authorization");
@@ -360,5 +394,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json({ models: AVAILABLE_MODELS });
+  return NextResponse.json({
+    models: AVAILABLE_MODELS,
+    analysts: ANALYST_PERSONAS.map(a => ({
+      id: a.id,
+      name: a.name,
+      shortDescription: a.shortDescription,
+      philosophy: a.philosophy,
+      icon: a.icon,
+    })),
+  });
 }

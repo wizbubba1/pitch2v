@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSubmission, updateSubmission, StoredFile, AnalysisResult } from "@/lib/store";
+import { getSubmission, updateSubmission, addAnalysisRun, generateRunId, StoredFile, AnalysisResult, ANALYST_PERSONAS } from "@/lib/store";
 import { extractText } from "unpdf";
 
-const SYSTEM_PROMPT = `# Pitch2V AI Agent System Prompt — ADMIN RE-EVALUATION MODE
+const BASE_SYSTEM_PROMPT = `# Pitch2V AI Agent System Prompt — ADMIN RE-EVALUATION MODE
 ## Vitruvius Venture Studio — Enhanced Pitch Deck Evaluation
 
 ---
@@ -173,10 +173,29 @@ function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks:
   return undefined;
 }
 
+function buildSystemPrompt(analystId?: string): string {
+  if (!analystId) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  const analyst = ANALYST_PERSONAS.find(a => a.id === analystId);
+  if (!analyst) {
+    return BASE_SYSTEM_PROMPT;
+  }
+
+  // Prepend the analyst's behavioral prompt to the base system prompt
+  return `${analyst.behavioralPrompt}
+
+---
+
+${BASE_SYSTEM_PROMPT}`;
+}
+
 async function reEvaluateWithAI(
   pitchDeckText: string,
   additionalDocsTexts: { name: string; text: string }[],
-  modelId: string
+  modelId: string,
+  analystId?: string
 ): Promise<Record<string, unknown>> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -197,13 +216,14 @@ async function reEvaluateWithAI(
     combinedContent = combinedContent.substring(0, 120000) + "\n\n[Content truncated...]";
   }
 
+  const systemPrompt = buildSystemPrompt(analystId);
   const providerConfig = getProviderConfig(modelId);
 
   // Build request body - only include provider if it's defined
   const requestBody: Record<string, unknown> = {
     model: modelId,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: `Re-evaluate this startup based on the original pitch deck AND the additional documentation provided by the admin. Respond ONLY with the JSON object:\n\n${combinedContent}`,
@@ -264,10 +284,14 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const submissionId = formData.get("submissionId") as string;
     const modelId = formData.get("model") as string || "anthropic/claude-sonnet-4";
+    const analystId = formData.get("analystId") as string | null;
 
     // Validate model
     const selectedModel = AVAILABLE_MODELS.find(m => m.id === modelId)?.id || "anthropic/claude-sonnet-4";
     const modelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel);
+
+    // Validate analyst if provided
+    const selectedAnalyst = analystId ? ANALYST_PERSONAS.find(a => a.id === analystId) : undefined;
 
     if (!submissionId) {
       return NextResponse.json(
@@ -342,8 +366,9 @@ export async function POST(request: NextRequest) {
       : (submission.analysis?.overallScore || 0);
 
     // Re-run AI analysis with combined documents
-    console.log(`[ADMIN-REEVAL] Re-evaluating submission ${submissionId} with ${additionalFiles.length} admin docs using model: ${selectedModel}...`);
-    const reEvalAnalysis = await reEvaluateWithAI(originalPitchText, additionalTexts, selectedModel);
+    const analystLabel = selectedAnalyst ? ` with ${selectedAnalyst.name}` : "";
+    console.log(`[ADMIN-REEVAL] Re-evaluating submission ${submissionId} with ${additionalFiles.length} admin docs using model: ${selectedModel}${analystLabel}...`);
+    const reEvalAnalysis = await reEvaluateWithAI(originalPitchText, additionalTexts, selectedModel, selectedAnalyst?.id);
     console.log(`[ADMIN-REEVAL] Complete. New score: ${reEvalAnalysis.overallScore} (was: ${previousScore})`);
 
     // Combine with any existing additional docs
@@ -354,6 +379,25 @@ export async function POST(request: NextRequest) {
       ...additionalFiles.map(f => f.name)
     ];
 
+    // Create analysis run for tracking
+    const runId = generateRunId();
+    const run = {
+      id: runId,
+      createdAt: new Date().toISOString(),
+      modelId: selectedModel,
+      modelName: modelInfo?.name || selectedModel,
+      analystId: selectedAnalyst?.id,
+      analystName: selectedAnalyst?.name,
+      analysis: reEvalAnalysis as unknown as AnalysisResult,
+      isKept: true,
+      isReEvaluation: true,
+      additionalDocsUsed: additionalFiles.map(f => f.name),
+    };
+
+    // Add the run to the submission
+    addAnalysisRun(submissionId, run);
+
+    // Also update legacy reEvaluation field for backward compatibility
     updateSubmission(submissionId, {
       additionalDocsFiles: allAdditionalDocs,
       reEvaluation: {
@@ -365,12 +409,14 @@ export async function POST(request: NextRequest) {
       status: "re-evaluated",
     });
 
-    console.log(`[ADMIN-REEVAL] Updated submission ${submissionId}`);
+    console.log(`[ADMIN-REEVAL] Added run ${runId} to submission ${submissionId}`);
 
     return NextResponse.json({
       success: true,
       message: "Admin re-evaluation complete",
+      runId,
       model: modelInfo?.name || selectedModel,
+      analyst: selectedAnalyst?.name,
       documentCount: additionalFiles.length,
       previousScore: previousScore,
       newScore: reEvalAnalysis.overallScore,

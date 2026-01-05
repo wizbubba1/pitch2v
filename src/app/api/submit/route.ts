@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         extractedText: content,
       },
       analyzed: false, // Not yet analyzed - admin will trigger
+      analysisRuns: [], // Multiple analysis runs stored here
       additionalDocsFiles: [],
       status: "awaiting-analysis",
       notes: "",
