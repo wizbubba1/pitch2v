@@ -161,12 +161,16 @@ const AVAILABLE_MODELS = [
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google" },
 ];
 
-function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks: boolean } {
+function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks: boolean } | undefined {
   const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+  // Don't force provider for Google models - let OpenRouter handle routing
+  if (model && model.provider === "google") {
+    return undefined;
+  }
   if (model) {
     return { order: [model.provider], allow_fallbacks: false };
   }
-  return { order: ["anthropic"], allow_fallbacks: false };
+  return undefined;
 }
 
 async function reEvaluateWithAI(
@@ -195,6 +199,25 @@ async function reEvaluateWithAI(
 
   const providerConfig = getProviderConfig(modelId);
 
+  // Build request body - only include provider if it's defined
+  const requestBody: Record<string, unknown> = {
+    model: modelId,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `Re-evaluate this startup based on the original pitch deck AND the additional documentation provided by the admin. Respond ONLY with the JSON object:\n\n${combinedContent}`,
+      },
+    ],
+    temperature: 0,
+    max_tokens: 10000,
+  };
+
+  // Only add provider config for non-Google models
+  if (providerConfig) {
+    requestBody.provider = providerConfig;
+  }
+
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -203,19 +226,7 @@ async function reEvaluateWithAI(
       "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
       "X-Title": "pitch2v - Vitruvius Admin Re-evaluation",
     },
-    body: JSON.stringify({
-      model: modelId,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Re-evaluate this startup based on the original pitch deck AND the additional documentation provided by the admin. Respond ONLY with the JSON object:\n\n${combinedContent}`,
-        },
-      ],
-      temperature: 0,
-      max_tokens: 10000,
-      provider: providerConfig,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {

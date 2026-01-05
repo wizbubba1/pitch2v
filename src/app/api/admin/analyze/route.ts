@@ -197,13 +197,16 @@ Weights for overallScore calculation:
 | Bridge Medical | AI triage/telemedicine |
 | V-Motion Academy | STEM education |`;
 
-function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks: boolean } {
+function getProviderConfig(modelId: string): { order: string[]; allow_fallbacks: boolean } | undefined {
   const model = AVAILABLE_MODELS.find(m => m.id === modelId);
+  // Don't force provider for Google models - let OpenRouter handle routing
+  if (model && model.provider === "google") {
+    return undefined;
+  }
   if (model) {
     return { order: [model.provider], allow_fallbacks: false };
   }
-  // Default to OpenAI
-  return { order: ["openai"], allow_fallbacks: false };
+  return undefined;
 }
 
 async function analyzeWithAI(content: string, modelId: string): Promise<Record<string, unknown>> {
@@ -215,6 +218,25 @@ async function analyzeWithAI(content: string, modelId: string): Promise<Record<s
 
   const providerConfig = getProviderConfig(modelId);
 
+  // Build request body - only include provider if it's defined
+  const requestBody: Record<string, unknown> = {
+    model: modelId,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `Analyze this pitch deck and respond ONLY with the JSON object:\n\n${content}`,
+      },
+    ],
+    temperature: 0,
+    max_tokens: 8000,
+  };
+
+  // Only add provider config for non-Google models
+  if (providerConfig) {
+    requestBody.provider = providerConfig;
+  }
+
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -223,19 +245,7 @@ async function analyzeWithAI(content: string, modelId: string): Promise<Record<s
       "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
       "X-Title": "pitch2v - Vitruvius Venture Studio",
     },
-    body: JSON.stringify({
-      model: modelId,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Analyze this pitch deck and respond ONLY with the JSON object:\n\n${content}`,
-        },
-      ],
-      temperature: 0,
-      max_tokens: 8000,
-      provider: providerConfig,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
